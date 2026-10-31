@@ -1,0 +1,5 @@
+services:
+  redis:
+    image: redis/redis-stack-server:latest   # includes the search module needed by the semantic cache
+    ports:
+      - "6379:6379"
