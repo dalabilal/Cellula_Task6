@@ -1,8 +1,8 @@
 # Evaluator–Generator Q&A Platform
 
-A question-answering app where a **Generator LLM** answers only from your documents and an
+A question-answering platform where a **Generator LLM** answers only from your documents and an
 **Evaluator LLM** checks the answer and sends feedback until it is good (maximum **4 loops**).
-Built with LangChain (LCEL), Chroma, Redis, Streamlit and OpenRouter. Runs on **WSL Ubuntu, no Docker**.
+Built with LangChain (LCEL), Chroma, Redis, FastAPI and OpenRouter. Runs on **WSL Ubuntu, no Docker**.
 
 ## How it works
 
@@ -39,7 +39,8 @@ Supported sources: PDF, DOCX, TXT, source-code files, PPT/PPTX, web pages (URL),
 
 | File | Purpose |
 |---|---|
-| `app.py` | Streamlit UI: upload files, add URLs/Wikipedia, chat, show Generator ↔ Evaluator attempts |
+| `app.py` | FastAPI backend: endpoints for uploads, URLs, Wikipedia, questions |
+| `index.html` | User interface (served by FastAPI): sources panel, chat, loop attempts |
 | `workflow.py` | LCEL orchestration: cache check, retrieval, 4-loop Generator ↔ Evaluator process |
 | `chains.py` | Generator chain, Evaluator chain, OpenRouter LLM connection |
 | `memory.py` | Isolated memory per agent (each memory has an owner) |
@@ -54,6 +55,21 @@ Supported sources: PDF, DOCX, TXT, source-code files, PPT/PPTX, web pages (URL),
 
 Folders created when you run the app: `chroma_db/` (stored chunks), `uploads/` (uploaded files), `logs/`.
 
+## API endpoints
+
+| Endpoint | What it does |
+|---|---|
+| `GET /` | The user interface (`index.html`) |
+| `GET /health` | Redis status and number of sources |
+| `POST /upload` | Process one or more files (one result per file) |
+| `POST /add-url` | Add a web page |
+| `POST /add-wikipedia` | Add a Wikipedia page (title or URL) |
+| `GET /documents` | List the sources in the knowledge base |
+| `DELETE /knowledge` | Clear the knowledge base |
+| `POST /ask` | Run the Generator ↔ Evaluator loop and return the answer, loops used, and every attempt |
+
+FastAPI also provides an interactive test page at `http://localhost:8000/docs`.
+
 ## LCEL building blocks used (in `workflow.py`)
 
 - **RunnablePassthrough.assign**: adds `loop`, `context`, `answer` and `verdict` to the state.
@@ -65,9 +81,9 @@ Folders created when you run the app: `chroma_db/` (stored chunks), `uploads/` (
 
 The Generator and the Evaluator each get their own `AgentMemory` object. Every read or write
 must say who is calling, and a wrong caller raises `PermissionError`, so neither agent can
-access the other's memory.
+access the other's memory. Memories live as long as the server runs (restarting `uvicorn` resets them).
 
-- Generator memory: conversation questions, previous answers, retrieved context.
+- Generator memory: questions, previous answers, retrieved context.
 - Evaluator memory: evaluation history, decisions, feedback.
 
 ## Redis caching
@@ -99,7 +115,7 @@ echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://pack
 sudo apt update
 sudo apt install -y redis
 ```
-Check it: `redis-server` in one terminal, then `redis-cli ping` (should print `PONG`) and `redis-cli MODULE LIST` (should list `search`).
+Check it: run `redis-server` in one terminal, then `redis-cli ping` (should print `PONG`) and `redis-cli MODULE LIST` (should list `search`).
 
 **2. Python environment (once)**
 ```bash
@@ -127,16 +143,17 @@ Terminal 2:
 ```bash
 source ~/venv312/bin/activate
 cd /path/to/eval_gen_platform
-streamlit run app.py
+uvicorn app:app
 ```
-Open `http://localhost:8501` in your Windows browser.
+Open **`http://localhost:8000`** in your browser. Do not open `index.html` by double-clicking it,
+because it only works when served by FastAPI.
 
 ## How to use
 
-1. In the sidebar, add at least one source: upload files and click **Process files**, or add a web page URL, or a Wikipedia page.
+1. In the left panel, add at least one source: choose files and click **Process files**, or add a web page URL, or a Wikipedia page.
 2. Ask a question about what is inside your sources.
-3. Read the answer: ✅ validated, ⚠️ not fully validated (after 4 loops), or ⚡ served from the Redis semantic cache.
-4. Open **Show Generator ↔ Evaluator attempts** to see every loop with its score and feedback.
+3. Read the answer and its badge: ✅ validated, ⚠️ not fully validated (after 4 loops), or ⚡ served from the Redis semantic cache.
+4. Open **Show Generator and Evaluator attempts** to see every loop with its score and feedback.
 
 Questions that your sources cannot answer get: *"The required information is not available in the provided sources."*
 
@@ -144,7 +161,7 @@ Optional: `sudo apt install -y libreoffice-impress` to support old `.ppt` files 
 
 ## Error handling and logging
 
-- Checked with clear messages: unsupported file type, file too large, invalid URL, empty text, Redis not running, missing API key.
+- Checked with clear messages: unsupported file type, file too large, invalid URL, empty text, empty or too long question, Redis not running, missing API key.
 - Badly formatted Evaluator output counts as "not approved" instead of crashing.
 - `logs/app.log` records loop number, score, cache hits/misses and time per question.
 
