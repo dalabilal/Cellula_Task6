@@ -1,4 +1,3 @@
-streamlit
 python-dotenv
 langchain==1.4.7
 langchain-core==1.7.3
@@ -20,3 +19,6 @@ wikipedia
 faster-whisper
 av
 numpy
+fastapi
+uvicorn
+python-multipart

@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evaluator-Generator Q&amp;A Platform</title>
+<style>
+  :root {
+    --bg: #f4f6fb; --card: #ffffff; --text: #1d2433; --muted: #6b7488; --line: #dde2ee;
+    --brand: #2f5bea; --brand-text: #ffffff; --user: #e8eeff;
+    --ok-bg: #e3f6ea; --ok: #17794a; --warn-bg: #fff2d9; --warn: #8a5a00;
+    --cache-bg: #e6f0ff; --cache: #1f4fc4; --err-bg: #fde8e8; --err: #a12a2a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151d; --card: #1b2030; --text: #e8ecf6; --muted: #9aa4bc; --line: #2b3247;
+      --brand: #5b82ff; --brand-text: #0e1220; --user: #26305a;
+      --ok-bg: #173826; --ok: #6fdba0; --warn-bg: #3d2f10; --warn: #f3c46b;
+      --cache-bg: #1c2c55; --cache: #8fb0ff; --err-bg: #432020; --err: #ff9a9a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+           padding: 14px 24px; background: var(--card); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 1.15rem; margin: 0; }
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill { font-size: .8rem; padding: 4px 10px; border-radius: 999px; background: var(--bg);
+          border: 1px solid var(--line); color: var(--muted); }
+  .pill.good { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
+  .pill.bad { background: var(--err-bg); color: var(--err); border-color: transparent; }
+
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 20px; padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .card h2 { font-size: 1rem; margin: 0 0 12px; }
+  .block { margin-bottom: 18px; }
+  .block label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 6px; }
+  .hint { font-size: .78rem; color: var(--muted); margin: 6px 0 0; }
+
+  input[type=text], textarea, input[type=file] {
+    width: 100%; padding: 9px 10px; border-radius: 9px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); font: inherit; font-size: .9rem;
+  }
+  button { font: inherit; font-size: .88rem; cursor: pointer; border: 0; border-radius: 9px;
+           padding: 9px 14px; background: var(--brand); color: var(--brand-text); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.secondary { background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 500; }
+  .row { display: flex; gap: 8px; }
+  .row input { flex: 1; }
+  .btn-full { width: 100%; margin-top: 8px; }
+
+  #sourceStatus { font-size: .82rem; margin: 8px 0 0; }
+  #sourceStatus div { padding: 6px 9px; border-radius: 8px; margin-top: 6px; }
+  #sourceStatus .ok { background: var(--ok-bg); color: var(--ok); }
+  #sourceStatus .err { background: var(--err-bg); color: var(--err); }
+  #docList { list-style: none; padding: 0; margin: 0 0 10px; font-size: .85rem; }
+  #docList li { padding: 6px 0; border-bottom: 1px solid var(--line); word-break: break-word; }
+  #docList small { color: var(--muted); }
+
+  .chat { display: flex; flex-direction: column; min-height: 70vh; }
+  #messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-bottom: 12px; }
+  .empty { color: var(--muted); font-size: .9rem; line-height: 1.5; }
+  .msg { max-width: 88%; padding: 11px 14px; border-radius: 14px; line-height: 1.5; font-size: .93rem;
+         white-space: pre-wrap; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: var(--user); }
+  .msg.bot { align-self: flex-start; background: var(--bg); border: 1px solid var(--line); }
+  .msg.error { background: var(--err-bg); color: var(--err); border-color: transparent; }
+  .badge { display: inline-block; margin-top: 10px; font-size: .78rem; padding: 3px 9px; border-radius: 999px; font-weight: 600; }
+  .badge.ok { background: var(--ok-bg); color: var(--ok); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn); }
+  .badge.cache { background: var(--cache-bg); color: var(--cache); }
+  .badge.none { background: var(--line); color: var(--muted); }
+  details { margin-top: 10px; font-size: .84rem; white-space: normal; }
+  summary { cursor: pointer; color: var(--muted); }
+  .attempt { margin-top: 8px; padding: 9px 11px; border-radius: 9px; background: var(--card); border: 1px solid var(--line); white-space: pre-wrap; }
+  .attempt strong { display: block; margin-bottom: 4px; }
+  .feedback { margin-top: 6px; color: var(--warn); }
+  .working { color: var(--muted); font-style: italic; }
+
+  .composer { display: flex; gap: 8px; align-items: flex-end; border-top: 1px solid var(--line); padding-top: 12px; }
+  .composer textarea { resize: none; height: 46px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧠 Evaluator-Generator Q&amp;A Platform</h1>
+  <div class="pills">
+    <span class="pill" id="redisPill">Redis: checking...</span>
+    <span class="pill" id="docsPill">Sources: 0</span>
+    <span class="pill">Max loops: 4</span>
+  </div>
+</header>
+
+<main>
+  <!-- ===== left: knowledge sources ===== -->
+  <section class="card">
+    <h2>📚 Knowledge sources</h2>
+
+    <div class="block">
+      <label for="fileInput">Files</label>
+      <input type="file" id="fileInput" multiple>
+      <p class="hint">PDF, DOCX, TXT, code, PPT/PPTX, WAV</p>
+      <button class="btn-full" id="uploadBtn">Process files</button>
+    </div>
+
+    <div class="block">
+      <label for="urlInput">Web page URL</label>
+      <div class="row">
+        <input type="text" id="urlInput" placeholder="https://example.com/article">
+        <button id="urlBtn">Add</button>
+      </div>
+    </div>
+
+    <div class="block">
+      <label for="wikiInput">Wikipedia page</label>
+      <div class="row">
+        <input type="text" id="wikiInput" placeholder="Title or URL">
+        <button id="wikiBtn">Add</button>
+      </div>
+    </div>
+
+    <div id="sourceStatus" aria-live="polite"></div>
+
+    <h2 style="margin-top:18px">In the knowledge base</h2>
+    <ul id="docList"></ul>
+    <button class="secondary" id="clearBtn">🗑️ Clear knowledge base</button>
+  </section>
+
+  <!-- ===== right: chat ===== -->
+  <section class="card chat">
+    <h2>💬 Ask a question</h2>
+    <div id="messages" aria-live="polite">
+      <p class="empty" id="emptyNote">
+        1. Add at least one source on the left.<br>
+        2. Ask a question about what is inside your sources.<br>
+        The Generator writes an answer, the Evaluator checks it, and they repeat up to 4 times.
+      </p>
+    </div>
+    <div class="composer">
+      <textarea id="questionInput" placeholder="Ask about your sources... (Enter to send, Shift+Enter for a new line)"></textarea>
+      <button id="askBtn">Send</button>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const MAX_LOOPS = 4;
+
+// ---------- helper: call the API and turn errors into readable messages ----------
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    let msg = "Request failed (" + res.status + ")";
+    if (typeof data.detail === "string") msg = data.detail;
+    else if (Array.isArray(data.detail)) msg = "Please check your input (the question may be too long).";
+    throw new Error(msg);
+  }
+  return data;
+}
+
+function jsonPost(path, body) {
+  return api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
+// ---------- status pills and source list ----------
+async function loadHealth() {
+  const pill = $("redisPill");
+  try {
+    const h = await api("/health");
+    pill.textContent = h.redis ? "Redis: connected" : "Redis: down";
+    pill.className = "pill " + (h.redis ? "good" : "bad");
+    $("docsPill").textContent = "Sources: " + h.documents;
+  } catch (e) {
+    pill.textContent = "Server: not reachable";
+    pill.className = "pill bad";
+  }
+}
+
+async function loadDocs() {
+  const list = $("docList");
+  list.innerHTML = "";
+  try {
+    const data = await api("/documents");
+    if (!data.documents.length) {
+      const li = document.createElement("li");
+      li.textContent = "Nothing added yet.";
+      list.appendChild(li);
+    }
+    data.documents.forEach((d) => {
+      const li = document.createElement("li");
+      li.textContent = d.name + " ";
+      const small = document.createElement("small");
+      small.textContent = "(" + d.chunks + " chunks)";
+      li.appendChild(small);
+      list.appendChild(li);
+    });
+  } catch (e) { /* the health pill already shows server problems */ }
+  loadHealth();
+}
+
+function showStatus(message, ok) {
+  const div = document.createElement("div");
+  div.className = ok ? "ok" : "err";
+  div.textContent = message;
+  $("sourceStatus").prepend(div);
+}
+
+async function runSource(button, task) {
+  button.disabled = true;
+  const oldText = button.textContent;
+  button.textContent = "Processing...";
+  try {
+    await task();
+  } catch (e) {
+    showStatus(e.message, false);
+  } finally {
+    button.disabled = false;
+    button.textContent = oldText;
+    loadDocs();
+  }
+}
+
+// ---------- add sources ----------
+$("uploadBtn").onclick = () => runSource($("uploadBtn"), async () => {
+  const files = $("fileInput").files;
+  if (!files.length) throw new Error("Choose at least one file first.");
+  const form = new FormData();
+  for (const f of files) form.append("files", f);
+  const data = await api("/upload", { method: "POST", body: form });
+  data.results.forEach((r) => showStatus(r.message, r.ok));
+  $("fileInput").value = "";
+});
+
+$("urlBtn").onclick = () => runSource($("urlBtn"), async () => {
+  const url = $("urlInput").value.trim();
+  if (!url) throw new Error("Type a URL first.");
+  const data = await jsonPost("/add-url", { url });
+  showStatus(data.message, true);
+  $("urlInput").value = "";
+});
+
+$("wikiBtn").onclick = () => runSource($("wikiBtn"), async () => {
+  const page = $("wikiInput").value.trim();
+  if (!page) throw new Error("Type a Wikipedia title or URL first.");
+  const data = await jsonPost("/add-wikipedia", { page });
+  showStatus(data.message, true);
+  $("wikiInput").value = "";
+});
+
+$("clearBtn").onclick = async () => {
+  if (!confirm("Remove every source from the knowledge base?")) return;
+  try {
+    const data = await api("/knowledge", { method: "DELETE" });
+    showStatus(data.message, true);
+  } catch (e) {
+    showStatus(e.message, false);
+  }
+  loadDocs();
+};
+
+// ---------- chat ----------
+function addMessage(kind, text) {
+  const note = $("emptyNote");
+  if (note) note.remove();
+  const div = document.createElement("div");
+  div.className = "msg " + kind;
+  div.textContent = text;
+  $("messages").appendChild(div);
+  $("messages").scrollTop = $("messages").scrollHeight;
+  return div;
+}
+
+function makeBadge(data) {
+  const badge = document.createElement("span");
+  if (data.from_cache) {
+    badge.className = "badge cache";
+    badge.textContent = "⚡ Served from the Redis semantic cache";
+  } else if (data.loops === 0) {
+    badge.className = "badge none";
+    badge.textContent = "No matching knowledge was found";
+  } else if (data.validated) {
+    badge.className = "badge ok";
+    badge.textContent = "✅ Validated by the Evaluator after " + data.loops + " of " + MAX_LOOPS + " loop(s)";
+  } else {
+    badge.className = "badge warn";
+    badge.textContent = "⚠️ Not fully validated after " + data.loops + " of " + MAX_LOOPS + " loops";
+  }
+  return badge;
+}
+
+function makeAttempts(attempts) {
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = "Show Generator and Evaluator attempts (" + attempts.length + ")";
+  details.appendChild(summary);
+  attempts.forEach((a) => {
+    const box = document.createElement("div");
+    box.className = "attempt";
+    const title = document.createElement("strong");
+    title.textContent = "Loop " + a.loop + " | approved: " + a.approved + " | score: " + a.score + "/10";
+    box.appendChild(title);
+    box.appendChild(document.createTextNode(a.answer));
+    if (a.feedback) {
+      const fb = document.createElement("div");
+      fb.className = "feedback";
+      fb.textContent = "Evaluator feedback: " + a.feedback;
+      box.appendChild(fb);
+    }
+    details.appendChild(box);
+  });
+  return details;
+}
+
+async function ask() {
+  const question = $("questionInput").value.trim();
+  if (!question) return;
+  $("questionInput").value = "";
+  $("askBtn").disabled = true;
+  addMessage("user", question);
+  const bubble = addMessage("bot", "Generator and Evaluator are working... this can take a minute.");
+  bubble.classList.add("working");
+
+  try {
+    const data = await jsonPost("/ask", { question });
+    bubble.classList.remove("working");
+    bubble.textContent = data.answer;
+    bubble.appendChild(document.createElement("br"));
+    bubble.appendChild(makeBadge(data));
+    if (data.attempts && data.attempts.length) bubble.appendChild(makeAttempts(data.attempts));
+  } catch (e) {
+    bubble.classList.remove("working");
+    bubble.classList.add("error");
+    bubble.textContent = e.message;
+  } finally {
+    $("askBtn").disabled = false;
+    $("questionInput").focus();
+    $("messages").scrollTop = $("messages").scrollHeight;
+  }
+}
+
+$("askBtn").onclick = ask;
+$("questionInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); }
+});
+
+loadDocs();
+</script>
+</body>
+</html>
